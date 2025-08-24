@@ -850,6 +850,24 @@ async def tuneall_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         results.append(r)
     await update.message.reply_text("TuneAll:\n" + "\n".join(results))
 
+async def paperstatus_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not paper_pos:
+        return await update.message.reply_text("No paper positions tracked.")
+    lines = ["📄 Active Paper Positions:"]
+    for sym, pos in paper_pos.items():
+        side = int(pos.get("side", 0))
+        if side == 0 or pos.get("size", 0) == 0:
+            continue
+        side_str = "LONG" if side > 0 else "SHORT"
+        entry = pos.get("entry", 0.0)
+        size = pos.get("size", 0.0)
+        stop = pos.get("stop", 0.0)
+        take = pos.get("take", 0.0)
+        lines.append(f"{sym}: {side_str} entry={entry:.6f} size={size:.6f} stop={stop:.6f} take={take:.6f}")
+    if len(lines) == 1:
+        lines.append("(none open)")
+    await update.message.reply_text("\n".join(lines))
+
 # ---------- Startup ----------
 async def on_startup(app: Application):
     cmds = [BotCommand(c["cmd"], c["desc"]) for c in COMMAND_SPECS]
@@ -890,6 +908,7 @@ def main():
     app.add_handler(CommandHandler("tune", tune_cmd))
     app.add_handler(CommandHandler("tuneall", tuneall_cmd))
     app.add_handler(CommandHandler("paperlive", paperlive_cmd))
+    app.add_handler(CommandHandler("paperstatus", paperstatus_cmd))
     print("🤖 Bot running... try /help")
     app.run_polling(close_loop=False)
 
