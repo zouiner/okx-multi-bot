@@ -2,9 +2,6 @@
 from typing import List, Dict, Any, Optional, Tuple
 from math import inf
 
-# -----------------
-# Basic indicators
-# -----------------
 def ema(series: List[float], n: int) -> List[float]:
     if n <= 1 or not series: return list(series)
     k = 2.0 / (n + 1.0)
@@ -21,10 +18,11 @@ def rsi(prices: List[float], n: int = 14) -> List[float]:
         ch = prices[i] - prices[i-1]
         gains.append(max(ch, 0.0))
         losses.append(max(-ch, 0.0))
-    rsis = []
-    avg_gain = sum(gains[1:n+1]) / n if len(gains) > n else 0.0
-    avg_loss = sum(losses[1:n+1]) / n if len(losses) > n else 0.0
     rsis = [0.0] * len(prices)
+    if len(prices) <= n+1: 
+        return rsis
+    avg_gain = sum(gains[1:n+1]) / n
+    avg_loss = sum(losses[1:n+1]) / n
     for i in range(n+1, len(prices)):
         avg_gain = (avg_gain*(n-1) + gains[i]) / n
         avg_loss = (avg_loss*(n-1) + losses[i]) / n
@@ -88,9 +86,6 @@ def max_drawdown(equity: List[float]) -> float:
             if dd < max_dd: max_dd = dd
     return abs(max_dd)
 
-# -----------------
-# Fusion scoring
-# -----------------
 def clamp(x, a, b): return a if x < a else (b if x > b else x)
 
 def indicator_score(prices: List[float], candles: List[dict]) -> List[float]:
@@ -112,21 +107,20 @@ def indicator_score(prices: List[float], candles: List[dict]) -> List[float]:
 
         # RSI
         if r[i] > 0:
-            # map RSI 30..70 roughly to -0.7..+0.7, clip outside
             rnorm = clamp((r[i]-50.0)/20.0, -1.0, 1.0)
             s += rnorm * 0.20; wsum += 0.20
 
-        # MACD histogram sign/strength
+        # MACD histogram strength
         if m_hist[i] != 0 or m_line[i] != 0:
             macd_norm = clamp(m_hist[i] / (abs(m_line[i])+1e-12), -1.0, 1.0)
             s += macd_norm * 0.25; wsum += 0.25
 
-        # VWAP location: above vwap => bullish, below => bearish
+        # VWAP location
         if vwap[i] > 0:
             vloc = (prices[i] - vwap[i]) / vwap[i]
             s += clamp(vloc*5.0, -1.0, 1.0) * 0.10; wsum += 0.10
 
-        # Bollinger squeeze/edge hint (touch lower => bearish exhaustion -> slight +; touch upper => slight -)
+        # Bollinger edge hint
         if bb_hi[i] > bb_lo[i] > 0:
             if prices[i] <= bb_lo[i]: s += 0.05
             elif prices[i] >= bb_hi[i]: s -= 0.05
@@ -135,9 +129,6 @@ def indicator_score(prices: List[float], candles: List[dict]) -> List[float]:
         scores.append(clamp((s/wsum) if wsum>0 else 0.0, -1.0, 1.0))
     return scores
 
-# -----------------
-# Perps-style backtest
-# -----------------
 def run_perps_backtest(
     symbol: str,
     candles: List[dict],
@@ -157,11 +148,6 @@ def run_perps_backtest(
     ai_confidence: float = 0.0,       # 0..1
     ai_crisis: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Opens directional long/short using fused indicator score and AI bias.
-    Position Sizing: ATR-based stop distance & 1% equity risk define position notional (capped by leverage).
-    Exits: SL by ATR, TP by R-multiple, optional trailing stop.
-    """
     if not candles:
         return {"trades":0, "net_pnl":0.0, "roi_pct":0.0, "equity_curve":[], "params":{}}
 
